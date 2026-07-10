@@ -307,8 +307,9 @@ def send_reminders():
                 continue
             due = due_date_for(period, bill["due_day"])
             days_out = (due - today).days
-            if 0 <= days_out <= REMINDER_DAYS_BEFORE:
+            if days_out <= REMINDER_DAYS_BEFORE:
                 due_soon.append((bill, due))
+    due_soon.sort(key=lambda item: (item[1] - today).days)
 
     sent = False
     error = None
@@ -324,7 +325,8 @@ def send_reminders():
         from email.mime.text import MIMEText
 
         lines = [
-            f"{b['icon']+' ' if b['icon'] else ''}{b['name']} ${b['amount']:.2f} due {due.strftime('%b %d')}"
+            f"{'OVERDUE' if (due - today).days < 0 else 'Due'} "
+            f"{b['icon']+' ' if b['icon'] else ''}{b['name']} ${b['amount']:.2f} {due.strftime('%b %d')}"
             for b, due in due_soon
         ]
         msg = MIMEText("Bills due soon:\n" + "\n".join(lines))
