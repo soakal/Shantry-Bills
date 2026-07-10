@@ -194,10 +194,14 @@ def index():
 
     rows.sort(key=lambda r: r["due_date"])
 
+    year, month = map(int, period.split("-"))
+    period_display = date(year, month, 1).strftime("%B %Y")
+
     return render_template(
         "index.html",
         rows=rows,
         period=period,
+        period_display=period_display,
         prev_period=shift_period(period, -1),
         next_period=shift_period(period, 1),
         total=total,

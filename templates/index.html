@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}Shantry Bills — {{ period }}{% endblock %}
+{% block title %}Shantry Bills — {{ period_display }}{% endblock %}
 {% block content %}
 <h1 class="app-title">Shantry Bills</h1>
 <header class="topbar">
   <a href="{{ url_for('index', month=prev_period) }}" class="nav-btn">&larr;</a>
-  <h2>{{ period }}</h2>
+  <h2>{{ period_display }}</h2>
   <a href="{{ url_for('index', month=next_period) }}" class="nav-btn">&rarr;</a>
 </header>
 
