@@ -41,3 +41,24 @@ def test_cron_reminders_returns_502_on_smtp_failure(client, monkeypatch):
     assert data["sms_sent"] is False
     assert "error" in data
     assert data["due_soon"] >= 1
+
+
+def test_cron_reminders_returns_503_when_smtp_not_configured(client, monkeypatch):
+    import app as flask_app
+
+    _insert_due_soon_bill(flask_app.DB_PATH)
+
+    monkeypatch.setattr(flask_app, "CRON_SECRET", "test-cron-secret")
+    monkeypatch.setattr(flask_app, "SMTP_USER", None)
+    monkeypatch.setattr(flask_app, "SMTP_PASS", None)
+    monkeypatch.setattr(flask_app, "JON_SMS_GATEWAY", None)
+
+    response = client.post(
+        "/cron/reminders", headers={"X-Cron-Secret": "test-cron-secret"}
+    )
+
+    assert response.status_code == 503
+    data = response.get_json()
+    assert data["sms_sent"] is False
+    assert data["error"] == "SMTP not configured"
+    assert data["due_soon"] >= 1

@@ -308,6 +308,13 @@ def send_reminders():
 
     sent = False
     error = None
+    if due_soon and not (SMTP_USER and SMTP_PASS and JON_SMS_GATEWAY):
+        return {
+            "due_soon": len(due_soon),
+            "sms_sent": False,
+            "error": "SMTP not configured",
+        }, 503
+
     if due_soon and SMTP_USER and SMTP_PASS and JON_SMS_GATEWAY:
         import smtplib
         from email.mime.text import MIMEText
