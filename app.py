@@ -291,6 +291,7 @@ def send_reminders():
                 due_soon.append((bill, due))
 
     sent = False
+    error = None
     if due_soon and SMTP_USER and SMTP_PASS and JON_SMS_GATEWAY:
         import smtplib
         from email.mime.text import MIMEText
@@ -304,11 +305,17 @@ def send_reminders():
         msg["To"] = JON_SMS_GATEWAY
         msg["Subject"] = ""  # most carrier gateways drop the subject line anyway
 
-        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
-            server.starttls()
-            server.login(SMTP_USER, SMTP_PASS)
-            server.sendmail(SMTP_USER, [JON_SMS_GATEWAY], msg.as_string())
-        sent = True
+        try:
+            with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+                server.starttls()
+                server.login(SMTP_USER, SMTP_PASS)
+                server.sendmail(SMTP_USER, [JON_SMS_GATEWAY], msg.as_string())
+            sent = True
+        except Exception as exc:
+            error = str(exc)
+
+    if error is not None:
+        return {"due_soon": len(due_soon), "sms_sent": sent, "error": error}, 502
 
     return {"due_soon": len(due_soon), "sms_sent": sent}, 200
 
