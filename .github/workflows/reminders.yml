@@ -1,0 +1,15 @@
+name: Bill reminders
+
+on:
+  schedule:
+    - cron: "0 13 * * *"   # ~9am Eastern (UTC-4). Adjust for your timezone / DST.
+  workflow_dispatch: {}
+
+jobs:
+  remind:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger reminder check
+        run: |
+          curl -sf -X POST "https://shantry-bills.fly.dev/cron/reminders" \
+            -H "X-Cron-Secret: ${{ secrets.CRON_SECRET }}"

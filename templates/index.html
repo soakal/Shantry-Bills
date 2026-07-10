@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Shantry Bills — {{ period }}{% endblock %}
+{% block content %}
+<h1 class="app-title">Shantry Bills</h1>
+<header class="topbar">
+  <a href="{{ url_for('index', month=prev_period) }}" class="nav-btn">&larr;</a>
+  <h2>{{ period }}</h2>
+  <a href="{{ url_for('index', month=next_period) }}" class="nav-btn">&rarr;</a>
+</header>
+
+<div class="summary">
+  <span>Total: ${{ "%.2f"|format(total) }}</span>
+  <span>Paid: ${{ "%.2f"|format(total_paid) }}</span>
+  <span class="{{ 'warn' if remaining > 0 else '' }}">Left: ${{ "%.2f"|format(remaining) }}</span>
+</div>
+
+<ul class="bill-list">
+  {% for row in rows %}
+  <li class="bill {{ 'paid' if row.paid else '' }} {{ 'overdue' if row.overdue else '' }}">
+    <form method="post" action="{{ url_for('toggle', bill_id=row.bill.id) }}" class="check-form">
+      <input type="hidden" name="period" value="{{ period }}">
+      <button type="submit" class="check">{{ '✓' if row.paid else '' }}</button>
+    </form>
+    <a class="bill-info" href="{{ url_for('edit_bill', bill_id=row.bill.id) }}">
+      <span class="bill-name">{{ row.bill.icon + ' ' if row.bill.icon else '' }}{{ row.bill.name }}</span>
+      <span class="bill-due">Due {{ row.due_date.strftime('%b %d') }}</span>
+    </a>
+    <span class="bill-amount">${{ "%.2f"|format(row.bill.amount) }}</span>
+  </li>
+  {% else %}
+  <li class="empty">No bills yet. Add one below.</li>
+  {% endfor %}
+</ul>
+
+<a href="{{ url_for('add_bill') }}" class="add-btn">+ Add bill</a>
+{% endblock %}

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if bill else 'Add' }} bill{% endblock %}
+{% block content %}
+<div class="card">
+  <h1>{{ 'Edit' if bill else 'Add' }} bill</h1>
+  <form method="post">
+    <label>Icon
+      <select name="icon">
+        {% for value, label in icons %}
+        <option value="{{ value }}" {{ 'selected' if bill and bill.icon == value else '' }}>{{ value }} {{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <label>Name<input type="text" name="name" value="{{ bill.name if bill else '' }}" required></label>
+    <label>Amount<input type="number" step="0.01" name="amount" value="{{ bill.amount if bill else '' }}" required></label>
+    <label>Due day of month<input type="number" min="1" max="31" name="due_day" value="{{ bill.due_day if bill else '' }}" required></label>
+    <label>Notes<input type="text" name="notes" value="{{ bill.notes if bill else '' }}"></label>
+    <button type="submit">Save</button>
+  </form>
+  {% if bill %}
+  <form method="post" action="{{ url_for('delete_bill', bill_id=bill.id) }}" onsubmit="return confirm('Delete this bill?');">
+    <button type="submit" class="danger">Delete bill</button>
+  </form>
+  {% endif %}
+  <a href="{{ url_for('index') }}" class="back-link">&larr; Back</a>
+</div>
+{% endblock %}
