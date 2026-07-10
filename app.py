@@ -122,6 +122,22 @@ def logout():
 
 # ---------- Helpers ----------
 
+def normalize_period(raw: str | None) -> str:
+    """Return `raw` if it's a valid YYYY-MM string, otherwise fall back to
+    the current period. Guards `due_date_for`/`shift_period` (which do
+    `map(int, period.split("-"))` with no validation) against malformed
+    or missing `?month=` query values."""
+    if raw:
+        parts = raw.split("-")
+        if len(parts) == 2:
+            year_str, month_str = parts
+            if year_str.isdigit() and month_str.isdigit():
+                month = int(month_str)
+                if 1 <= month <= 12:
+                    return raw
+    return date.today().strftime("%Y-%m")
+
+
 def due_date_for(period: str, due_day: int) -> date:
     year, month = map(int, period.split("-"))
     last_day = monthrange(year, month)[1]
@@ -145,7 +161,7 @@ def shift_period(period: str, delta_months: int) -> str:
 @app.route("/")
 @login_required
 def index():
-    period = request.args.get("month") or date.today().strftime("%Y-%m")
+    period = normalize_period(request.args.get("month"))
     db = get_db()
     bills = db.execute(
         "SELECT * FROM bills WHERE active = 1 ORDER BY due_day"
