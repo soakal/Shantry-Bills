@@ -90,6 +90,18 @@ def init_db():
     db.close()
 
 
+# ---------- PWA ----------
+
+@app.route("/sw.js")
+def service_worker():
+    # Served at root (not /static/sw.js) so iOS Safari gives it scope "/" --
+    # WebKit's default service worker scope is the directory it's served
+    # from, and a /static/-scoped worker could never control app pages.
+    response = app.send_static_file("sw.js")
+    response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # ---------- Auth ----------
 
 def login_required(view):

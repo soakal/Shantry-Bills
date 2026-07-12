@@ -25,7 +25,9 @@ It'll be `https://shantry-bills.fly.dev` (or whatever name wasn't taken).
 ## 4. On Jon's phone
 - Open the URL in Safari (iOS) or Chrome (Android)
 - Log in with the password you set
-- Share button → "Add to Home Screen" — it'll behave like a real app icon, no App Store needed
+- Share button → "Add to Home Screen" — real app icon, standalone launch (no Safari address bar), no App Store needed
+
+PWA assets (icons, manifest, service worker) live in `static/icons/` and `static/manifest.json`. To regenerate icons after a design change: `pip install Pillow && python3 scripts/gen_icons.py`, then bump `CACHE_NAME` in `static/sw.js` so the new assets actually replace the cached ones on already-installed phones.
 
 ## Notes
 - SQLite file lives at `/data/bills.db` on the Fly volume — survives deploys and restarts.
