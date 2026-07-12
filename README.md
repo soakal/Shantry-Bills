@@ -53,6 +53,8 @@ Every US carrier will turn an email sent to a special address into a text on tha
 
 Example: a Verizon number `5551234567` → `5551234567@vtext.com`
 
+**Multiple recipients**: `JON_SMS_GATEWAY` accepts a comma-separated list, so you can text two (or more) people, even on different carriers — e.g. `JON_SMS_GATEWAY='5551234567@vtext.com,5559876543@tmomail.net'`.
+
 **Get a Gmail app password** (needed since Gmail blocks plain-password SMTP login):
 1. Turn on 2-Step Verification on the sending Gmail account, if not already on: myaccount.google.com/security
 2. Go to myaccount.google.com/apppasswords, create one named "bills", copy the 16-character password.

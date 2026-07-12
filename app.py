@@ -22,7 +22,7 @@ SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASS = os.environ.get("SMTP_PASS")
-JON_SMS_GATEWAY = os.environ.get("JON_SMS_GATEWAY")
+JON_SMS_GATEWAY = os.environ.get("JON_SMS_GATEWAY")  # comma-separated for multiple recipients
 
 
 # ---------- DB ----------
@@ -323,16 +323,18 @@ def send_reminders():
                 due_soon.append((bill, due))
     due_soon.sort(key=lambda item: (item[1] - today).days)
 
+    recipients = [addr.strip() for addr in (JON_SMS_GATEWAY or "").split(",") if addr.strip()]
+
     sent = False
     error = None
-    if due_soon and not (SMTP_USER and SMTP_PASS and JON_SMS_GATEWAY):
+    if due_soon and not (SMTP_USER and SMTP_PASS and recipients):
         return {
             "due_soon": len(due_soon),
             "sms_sent": False,
             "error": "SMTP not configured",
         }, 503
 
-    if due_soon and SMTP_USER and SMTP_PASS and JON_SMS_GATEWAY:
+    if due_soon and SMTP_USER and SMTP_PASS and recipients:
         import smtplib
         from email.mime.text import MIMEText
 
@@ -343,15 +345,18 @@ def send_reminders():
         ]
         msg = MIMEText("Bills due soon:\n" + "\n".join(lines))
         msg["From"] = SMTP_USER
-        msg["To"] = JON_SMS_GATEWAY
+        msg["To"] = ", ".join(recipients)
         msg["Subject"] = ""  # most carrier gateways drop the subject line anyway
 
         try:
             with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
                 server.starttls()
                 server.login(SMTP_USER, SMTP_PASS)
-                server.sendmail(SMTP_USER, [JON_SMS_GATEWAY], msg.as_string())
-            sent = True
+                refused = server.sendmail(SMTP_USER, recipients, msg.as_string())
+            if refused:
+                error = f"some recipients refused: {refused}"
+            else:
+                sent = True
         except Exception as exc:
             error = str(exc)
 
