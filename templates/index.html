@@ -33,4 +33,20 @@
 </ul>
 
 <a href="{{ url_for('add_bill') }}" class="add-btn">+ Add bill</a>
+
+{% if request.args.get('support') == 'sent' %}
+  <p class="support-msg">Thanks — your report was sent. We'll take a look.</p>
+{% elif request.args.get('support') == 'failed' %}
+  <p class="support-msg warn">Could not send the report — please text Brian directly.</p>
+{% elif request.args.get('support') == 'unconfigured' %}
+  <p class="support-msg warn">Support reporting isn't set up yet.</p>
+{% endif %}
+
+<details class="support">
+  <summary>Report a problem</summary>
+  <form method="post" action="{{ url_for('support') }}">
+    <textarea name="message" rows="3" placeholder="What went wrong? (optional)"></textarea>
+    <button type="submit">Send report</button>
+  </form>
+</details>
 {% endblock %}

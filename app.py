@@ -1,8 +1,11 @@
+import logging
 import os
 import sqlite3
+import sys
 from calendar import monthrange
 from datetime import date
 from functools import wraps
+from logging.handlers import RotatingFileHandler
 
 from flask import Flask, abort, g, redirect, render_template, request, session, url_for
 
@@ -16,6 +19,28 @@ app.config.update(
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "changeme")
 DB_PATH = os.environ.get("DB_PATH", "bills.db")
 
+# Logs to stdout (captured by `fly logs`, short retention) AND a rotating file
+# on the same persisted volume as the DB (survives restarts, longer retention
+# we control). So a "the reminder didn't show up Tuesday" report is traceable
+# without needing the customer to send anything themselves.
+LOG_PATH = os.environ.get("LOG_PATH", os.path.join(os.path.dirname(DB_PATH) or ".", "app.log"))
+_log_format = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+
+# Accessing app.logger for the first time auto-attaches Flask's own default
+# handler (bracketed format, to stderr); clear it first so our two handlers
+# below are the only ones -- otherwise every line prints twice.
+app.logger.handlers.clear()
+
+_stream_handler = logging.StreamHandler(sys.stdout)
+_stream_handler.setFormatter(_log_format)
+app.logger.addHandler(_stream_handler)
+
+_file_handler = RotatingFileHandler(LOG_PATH, maxBytes=1_000_000, backupCount=3)
+_file_handler.setFormatter(_log_format)
+app.logger.addHandler(_file_handler)
+
+app.logger.setLevel(logging.INFO)
+
 CRON_SECRET = os.environ.get("CRON_SECRET", "")
 REMINDER_DAYS_BEFORE = int(os.environ.get("REMINDER_DAYS_BEFORE", "3"))
 SMTP_HOST = os.environ.get("SMTP_HOST", "smtp.gmail.com")
@@ -23,6 +48,10 @@ SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
 SMTP_USER = os.environ.get("SMTP_USER")
 SMTP_PASS = os.environ.get("SMTP_PASS")
 JON_SMS_GATEWAY = os.environ.get("JON_SMS_GATEWAY")  # comma-separated for multiple recipients
+# Where in-app "Report a problem" submissions go. Defaults to the sending Gmail's
+# own inbox (SMTP_USER) so no extra config is needed; override with SUPPORT_EMAIL.
+# Must be a REAL mailbox, not an SMS gateway -- gateways strip the log attachment.
+SUPPORT_EMAIL = os.environ.get("SUPPORT_EMAIL") or SMTP_USER
 
 
 # ---------- DB ----------
@@ -40,6 +69,18 @@ def close_db(exc):
     db = g.pop("db", None)
     if db is not None:
         db.close()
+
+
+@app.after_request
+def log_request(response):
+    app.logger.info(
+        "%s %s -> %s (%s)",
+        request.method,
+        request.path,
+        response.status_code,
+        request.remote_addr,
+    )
+    return response
 
 
 COMMON_ICONS = [
@@ -121,8 +162,10 @@ def login():
         if request.form.get("password") == APP_PASSWORD:
             session["authed"] = True
             session.permanent = True
+            app.logger.info("login: success from %s", request.remote_addr)
             return redirect(request.args.get("next") or url_for("index"))
         error = "Wrong password."
+        app.logger.warning("login: failed attempt from %s", request.remote_addr)
     return render_template("login.html", error=error)
 
 
@@ -294,6 +337,63 @@ def delete_bill(bill_id):
     return redirect(url_for("index"))
 
 
+@app.route("/support", methods=["POST"])
+@login_required
+def support():
+    """In-app 'Report a problem' button. Emails SUPPORT_EMAIL the reporter's
+    note plus the current log file (attached) and its last 40 lines inline, so
+    a problem can be diagnosed without the user having to find/send anything."""
+    reporter_note = request.form.get("message", "").strip()
+
+    if not (SMTP_USER and SMTP_PASS and SUPPORT_EMAIL):
+        app.logger.warning("support: report submitted but SMTP/SUPPORT_EMAIL not configured")
+        return redirect(url_for("index", support="unconfigured"))
+
+    log_tail = "(log file not readable)"
+    log_bytes = b""
+    try:
+        with open(LOG_PATH, "rb") as fh:
+            log_bytes = fh.read()
+        log_tail = "\n".join(log_bytes.decode("utf-8", "replace").splitlines()[-40:])
+    except OSError:
+        pass
+
+    import smtplib
+    from email.mime.application import MIMEApplication
+    from email.mime.multipart import MIMEMultipart
+    from email.mime.text import MIMEText
+
+    body = (
+        "Shantry Bills problem report\n"
+        f"When: {date.today().isoformat()}\n"
+        f"From IP: {request.remote_addr}\n"
+        f"Browser: {request.headers.get('User-Agent', '?')}\n\n"
+        f"Message:\n{reporter_note or '(no message entered)'}\n\n"
+        f"--- last 40 log lines ---\n{log_tail}\n"
+    )
+
+    msg = MIMEMultipart()
+    msg["From"] = SMTP_USER
+    msg["To"] = SUPPORT_EMAIL
+    msg["Subject"] = "Shantry Bills - problem report"
+    msg.attach(MIMEText(body))
+    if log_bytes:
+        attachment = MIMEApplication(log_bytes, Name="app.log")
+        attachment["Content-Disposition"] = 'attachment; filename="app.log"'
+        msg.attach(attachment)
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASS)
+            server.sendmail(SMTP_USER, [SUPPORT_EMAIL], msg.as_string())
+        app.logger.info("support: report sent to %s", SUPPORT_EMAIL)
+        return redirect(url_for("index", support="sent"))
+    except Exception:
+        app.logger.exception("support: failed to send report")
+        return redirect(url_for("index", support="failed"))
+
+
 @app.route("/cron/reminders", methods=["POST"])
 def send_reminders():
     if not CRON_SECRET or request.headers.get("X-Cron-Secret") != CRON_SECRET:
@@ -328,6 +428,7 @@ def send_reminders():
     sent = False
     error = None
     if due_soon and not (SMTP_USER and SMTP_PASS and recipients):
+        app.logger.warning("reminders: %d due but SMTP not configured", len(due_soon))
         return {
             "due_soon": len(due_soon),
             "sms_sent": False,
@@ -359,10 +460,13 @@ def send_reminders():
                 sent = True
         except Exception as exc:
             error = str(exc)
+            app.logger.exception("reminders: failed to send SMS")
 
     if error is not None:
+        app.logger.error("reminders: due_soon=%d sent=%s error=%s", len(due_soon), sent, error)
         return {"due_soon": len(due_soon), "sms_sent": sent, "error": error}, 502
 
+    app.logger.info("reminders: due_soon=%d sent=%s", len(due_soon), sent)
     return {"due_soon": len(due_soon), "sms_sent": sent}, 200
 
 
